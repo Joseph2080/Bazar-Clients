@@ -16,7 +16,7 @@ const handleResponse = async (response) => {
 export const productsAPI = {
     // Get all products
     getAllProducts: async () => {
-        const response = await fetch(`${API_BASE_URL}/product-catalogs/by-store/8`, {
+        const response = await fetch(`${API_BASE_URL}/product-catalogs/by-store/9`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -52,7 +52,7 @@ export const productsAPI = {
 export const cartAPI = {
     // Add product to cart
     addToCart: async (productId, quantity = 1) => {
-        const response = await fetch(`${API_BASE_URL}/shop/cart`, {
+        const response = await fetch(`${API_BASE_URL}/shop/cart/item`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -111,5 +111,16 @@ export const cartAPI = {
             }
         });
         return handleResponse(response);
-    }
+    },
+
+    // get cart summary
+    getCartSummary: async () => {
+        const response = await fetch(`${API_BASE_URL}/shop/cart/summary`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        return handleResponse(response);
+    },
 };

@@ -4,16 +4,25 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { cartAPI } from "../../services/api";
 
-export default function OrderSummaryModal({ cart, onClose, onRemoveFromCart }) {
+export default function OrderSummaryModal({ cartSummary, onClose, onCartUpdate }) {
     const navigate = useNavigate();
     const [discountCode, setDiscountCode] = useState("");
-    const [appliedDiscounts, setAppliedDiscounts] = useState([]);
     const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
     const [error, setError] = useState(null);
+    const [isRemoving, setIsRemoving] = useState({});
 
-    const subtotal = cart.reduce((sum, item) => sum + item.productResponseDto.price, 0);
+    // Safely access cartItems with fallback
+    const cartItems = cartSummary?.cartItems || [];
+
+    // Use totalPrice from backend (already includes discounts)
+    const subtotal = cartSummary?.totalPrice || 0;
     const tax = subtotal * 0.20;
     const total = subtotal + tax;
+
+    // Calculate total discount from all items
+    const totalDiscount = cartItems.reduce((sum, item) => {
+        return sum + ((item.discount || 0) * item.quantity);
+    }, 0);
 
     const applyDiscount = async () => {
         if (!discountCode.trim()) return;
@@ -23,11 +32,9 @@ export default function OrderSummaryModal({ cart, onClose, onRemoveFromCart }) {
 
         try {
             await cartAPI.applyDiscount(discountCode);
-
-            if (!appliedDiscounts.includes(discountCode)) {
-                setAppliedDiscounts([...appliedDiscounts, discountCode]);
-            }
             setDiscountCode("");
+            // Refresh cart summary
+            await onCartUpdate();
         } catch (err) {
             setError(err.message || 'Failed to apply discount code');
             console.error('Error applying discount:', err);
@@ -36,29 +43,25 @@ export default function OrderSummaryModal({ cart, onClose, onRemoveFromCart }) {
         }
     };
 
-    const removeDiscount = async (code) => {
+    const handleRemoveItem = async (productName) => {
+        setIsRemoving(prev => ({ ...prev, [productName]: true }));
         try {
-            // If you have a remove discount endpoint, call it here
-            // For now, just remove from local state
-            setAppliedDiscounts(appliedDiscounts.filter(d => d !== code));
-        } catch (error) {
-            console.error("Error removing discount:", error);
-        }
-    };
-
-    const handleRemoveItem = async (productId) => {
-        try {
-            await cartAPI.removeFromCart(productId);
-            onRemoveFromCart(productId);
+            // You may need to adjust this based on your backend API
+            // If it expects product ID instead of name, you'll need to pass that
+            await cartAPI.removeFromCart(productName);
+            // Refresh cart summary
+            await onCartUpdate();
         } catch (err) {
             console.error('Error removing item:', err);
             alert('Failed to remove item from cart');
+        } finally {
+            setIsRemoving(prev => ({ ...prev, [productName]: false }));
         }
     };
 
     const handleProceedToCheckout = () => {
         onClose();
-        navigate('/checkout', { state: { cart, appliedDiscounts } });
+        navigate('/checkout', { state: { cartSummary } });
     };
 
     return (
@@ -97,44 +100,64 @@ export default function OrderSummaryModal({ cart, onClose, onRemoveFromCart }) {
 
                         {/* Cart Items */}
                         <div className="space-y-4 mb-6">
-                            {cart.map((item, index) => (
-                                <div key={index} className="flex justify-between items-start border-b pb-4">
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold">{item.productResponseDto.name}</h3>
-                                        <p className="text-sm text-gray-600 line-clamp-2">
-                                            {item.productResponseDto.description}
-                                        </p>
-                                    </div>
-                                    <div className="text-right ml-4 flex flex-col items-end gap-2">
-                                        <p className="font-semibold">€{item.productResponseDto.price.toFixed(2)}</p>
-                                        <button
-                                            onClick={() => handleRemoveItem(item.productResponseDto.productId)}
-                                            className="text-xs text-red-600 hover:text-red-800"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
+                            {cartItems.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">
+                                    Your cart is empty
                                 </div>
-                            ))}
+                            ) : (
+                                cartItems.map((item, index) => (
+                                    <div key={index} className="flex justify-between items-start border-b pb-4">
+                                        <div className="flex-1">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <h3 className="font-semibold">{item.productName}</h3>
+                                                    <p className="text-sm text-gray-600 line-clamp-2">
+                                                        {item.productDescription}
+                                                    </p>
+                                                    <div className="mt-2 flex items-center gap-2">
+                                                        <span className="text-sm text-gray-500">
+                                                            Quantity: {item.quantity}
+                                                        </span>
+                                                        {item.discount > 0 && (
+                                                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                                                                -€{item.discount.toFixed(2)} off each
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right ml-4 flex flex-col items-end gap-2">
+                                            <div>
+                                                {item.discount > 0 && (
+                                                    <p className="text-xs text-gray-400 line-through">
+                                                        €{(item.price * item.quantity).toFixed(2)}
+                                                    </p>
+                                                )}
+                                                <p className="font-semibold">
+                                                    €{((item.price * item.quantity) - (item.discount * item.quantity)).toFixed(2)}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleRemoveItem(item.productName)}
+                                                disabled={isRemoving[item.productName]}
+                                                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                                            >
+                                                {isRemoving[item.productName] ? 'Removing...' : 'Remove'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
 
                         {/* Discount Code Section */}
                         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                            <h3 className="font-semibold mb-3">Discount Codes</h3>
+                            <h3 className="font-semibold mb-3">Discount Code</h3>
 
-                            {appliedDiscounts.length > 0 && (
-                                <div className="mb-3 space-y-2">
-                                    {appliedDiscounts.map((code) => (
-                                        <div key={code} className="flex items-center justify-between bg-green-100 px-3 py-2 rounded">
-                                            <span className="text-sm font-medium text-green-800">{code}</span>
-                                            <button
-                                                onClick={() => removeDiscount(code)}
-                                                className="text-red-600 hover:text-red-800 text-sm"
-                                            >
-                                                Remove
-                                            </button>
-                                        </div>
-                                    ))}
+                            {totalDiscount > 0 && (
+                                <div className="mb-3 p-2 bg-green-100 text-green-800 text-sm rounded">
+                                    Total discount applied: €{totalDiscount.toFixed(2)}
                                 </div>
                             )}
 
@@ -166,9 +189,15 @@ export default function OrderSummaryModal({ cart, onClose, onRemoveFromCart }) {
                         {/* Price Breakdown */}
                         <div className="space-y-2 mb-6 border-t pt-4">
                             <div className="flex justify-between text-gray-600">
-                                <span>Subtotal</span>
+                                <span>Subtotal ({cartSummary?.totalItems || 0} items)</span>
                                 <span>€{subtotal.toFixed(2)}</span>
                             </div>
+                            {totalDiscount > 0 && (
+                                <div className="flex justify-between text-green-600">
+                                    <span>Total Discount</span>
+                                    <span>-€{totalDiscount.toFixed(2)}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between text-gray-600">
                                 <span>Tax (20%)</span>
                                 <span>€{tax.toFixed(2)}</span>
@@ -189,7 +218,8 @@ export default function OrderSummaryModal({ cart, onClose, onRemoveFromCart }) {
                             </button>
                             <button
                                 onClick={handleProceedToCheckout}
-                                className="flex-1 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800"
+                                disabled={cartItems.length === 0}
+                                className="flex-1 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
                             >
                                 Proceed to Checkout
                             </button>

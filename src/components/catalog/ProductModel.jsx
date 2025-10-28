@@ -84,7 +84,7 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
                         whileTap={{ scale: isAdded ? 1 : 0.95 }}
                         className={`w-full py-3 rounded-md font-semibold transition-colors ${
                             isAdded
-                                ? 'bg-green-600 text-white'
+                                ? 'bg-white text-black'
                                 : 'bg-black text-white hover:bg-gray-800'
                         } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={handleAddToCart}
