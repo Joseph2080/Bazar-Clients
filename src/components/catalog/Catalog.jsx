@@ -4,20 +4,23 @@ import { AnimatePresence, motion } from "framer-motion";
 import ProductModal from "../catalog/ProductModel";
 import ProductList from "./ProductList";
 import OrderSummaryModal from "../order/OrderSummaryModal";
-import logo from "../../assets/bazar-logo-rotating.gif";
+import OrderCheckout from "../order/OrderCheckout"
+import LoadingScreen from "../common/LoadingScreen";
+import logo from "../../assets/bazar-logo.gif";
 import { productsAPI, cartAPI } from "../../services/api";
 
 export default function Catalog() {
     const [selected, setSelected] = useState(null);
     const [showOrderSummary, setShowOrderSummary] = useState(false);
+    const [showOrderCheckout, setShowOrderCheckout] = useState(false);
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchQuery, setSearchQuery] = useState("");
 
-    // Cart summary from backend
-    const [cartSummary, setCartSummary] = useState(null);
-    const [isLoadingCart, setIsLoadingCart] = useState(false);
+    // Light cart state
+    const [cartCount, setCartCount] = useState(0);
+    const [cartTotal, setCartTotal] = useState(0);
 
     // Fetch products from backend
     useEffect(() => {
@@ -40,29 +43,39 @@ export default function Catalog() {
         fetchProducts();
     }, []);
 
-    // Fetch cart summary
-    const fetchCartSummary = async () => {
-        setIsLoadingCart(true);
+    // Fetch light cart info on mount
+    useEffect(() => {
+        fetchLightCartInfo();
+    }, []);
+
+    const fetchLightCartInfo = async () => {
         try {
             const response = await cartAPI.getCartSummary();
-            setCartSummary(response.data);
+            const summary = response.data;
+            setCartCount(summary?.totalItems || 0);
+            setCartTotal(summary?.totalPrice || 0);
         } catch (err) {
-            console.error('Error fetching cart summary:', err);
-            setCartSummary(null);
-        } finally {
-            setIsLoadingCart(false);
+            console.error('Error fetching cart info:', err);
+            setCartCount(0);
+            setCartTotal(0);
         }
     };
 
-    // Fetch cart on mount and when order summary is closed
-    useEffect(() => {
-        fetchCartSummary();
-    }, []);
-
-    const addToCart = async (product) => {
+    const addToCart = async (product, quantity = 1) => {
         try {
-            await cartAPI.addToCart(product.productResponseDto.productId);
-            await fetchCartSummary(); // Refresh cart
+            let response;
+
+            if (cartCount === 0) {
+                response = await cartAPI.createCart(product.productResponseDto.productId, quantity);
+            } else {
+                response = await cartAPI.addToCart(product.productResponseDto.productId, quantity);
+            }
+
+            if (response.data) {
+                setCartCount(response.data.cartSize || 0);
+            }
+
+            await fetchLightCartInfo();
         } catch (err) {
             console.error('Error adding to cart:', err);
             alert('Failed to add item to cart');
@@ -71,7 +84,17 @@ export default function Catalog() {
 
     const handleOrderSummaryClose = () => {
         setShowOrderSummary(false);
-        fetchCartSummary(); // Refresh cart when closing order summary
+        fetchLightCartInfo();
+    };
+
+    const handleProceedToCheckout = () => {
+        setShowOrderSummary(false);
+        setShowOrderCheckout(true);
+    };
+
+    const handleOrderCheckoutClose = () => {
+        setShowOrderCheckout(false);
+        fetchLightCartInfo();
     };
 
     // Filter products based on search query
@@ -84,14 +107,7 @@ export default function Catalog() {
 
     // Loading state
     if (isLoading) {
-        return (
-            <div className="min-h-screen bg-white flex items-center justify-center">
-                <div className="text-center">
-                    <img src={logo} alt="Loading"/>
-                    <p className="mt-4 text-gray-600">Loading products...</p>
-                </div>
-            </div>
-        );
+        return <LoadingScreen message="Loading products..." />;
     }
 
     // Error state
@@ -99,7 +115,7 @@ export default function Catalog() {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="text-center">
-                    <div className="text-red-600 text-xl mb-4">⚠️</div>
+                    <img src={logo} alt="Error" className="mx-auto mb-4 w-20 h-20" />
                     <h2 className="text-xl font-semibold mb-2">Failed to load products</h2>
                     <p className="text-gray-600 mb-4">{error}</p>
                     <button
@@ -118,15 +134,13 @@ export default function Catalog() {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="text-center">
+                    <img src={logo} alt="Empty" className="mx-auto mb-4 w-20 h-20 opacity-50" />
                     <h2 className="text-xl font-semibold mb-2">No products available</h2>
                     <p className="text-gray-600">Check back later for new items!</p>
                 </div>
             </div>
         );
     }
-
-    const totalItems = cartSummary?.totalItems || 0;
-    const totalPrice = cartSummary?.totalPrice || 0;
 
     return (
         <div className="min-h-screen bg-white">
@@ -135,11 +149,11 @@ export default function Catalog() {
                 <div className="bg-white border-b border-gray-200 px-4 py-4">
                     <div className="relative max-w-7xl mx-auto flex items-center gap-4">
                         {/* Logo */}
-                        <div className="flex-shrink-0">
+                        <div className="flex-shrink-0 h-10 w-auto overflow-hidden">
                             <img
                                 src={logo}
                                 alt="Logo"
-                                className="h-10 w-auto"
+                                className="h-10 w-auto scale-125"
                             />
                         </div>
 
@@ -195,7 +209,7 @@ export default function Catalog() {
                 </div>
             </div>
 
-            {totalItems > 0 && (
+            {cartCount > 0 && (
                 <motion.button
                     initial={{ y: 100, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
@@ -204,9 +218,9 @@ export default function Catalog() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                 >
-                    <span>Checkout ({totalItems})</span>
+                    <span>Checkout ({cartCount})</span>
                     <span className="bg-white text-black px-2 py-1 rounded text-sm">
-                        €{totalPrice.toFixed(2)}
+                        €{cartTotal.toFixed(2)}
                     </span>
                 </motion.button>
             )}
@@ -220,11 +234,18 @@ export default function Catalog() {
                     />
                 )}
 
-                {showOrderSummary && cartSummary && (
+                {showOrderSummary && (
                     <OrderSummaryModal
-                        cartSummary={cartSummary}
                         onClose={handleOrderSummaryClose}
-                        onCartUpdate={fetchCartSummary}
+                        onProceedToCheckout={handleProceedToCheckout}
+                        onCartCountUpdate={setCartCount}
+                    />
+                )}
+
+                {showOrderCheckout && (
+                    <OrderCheckout
+                        onClose={handleOrderCheckoutClose}
+                        onCartCountUpdate={setCartCount}
                     />
                 )}
             </AnimatePresence>

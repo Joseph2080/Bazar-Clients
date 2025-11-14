@@ -1,5 +1,12 @@
 // src/services/api.js
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+// Resolve API base URL in this priority:
+// 1) window.BAZAR_API_BASE_URL (from static HTML embed)
+// 2) window.REACT_APP_API_URL (alternate window override)
+// 3) process.env.REACT_APP_API_URL (CRA env)
+// 4) fallback to localhost
+const API_BASE_URL = (typeof window !== 'undefined' && (window.BAZAR_API_BASE_URL || window.REACT_APP_API_URL))
+    || (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL)
+    || 'http://localhost:8080/api/v1';
 
 // Helper function to handle API responses
 const handleResponse = async (response) => {
@@ -123,4 +130,52 @@ export const cartAPI = {
         });
         return handleResponse(response);
     },
+    // Process payment (Stripe)
+    processPayment: async (paymentData) => {
+        const response = await fetch(`${API_BASE_URL}/payments/process`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(paymentData)
+        });
+        return handleResponse(response);
+    }
+};
+
+// Order Checkout API
+export const orderAPI = {
+    // Generate checkout link for customer
+    generateCheckoutLink: async (customerId) => {
+        const response = await fetch(`${API_BASE_URL}/orders/checkout/link/${customerId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        return handleResponse(response);
+    },
+
+    // Get order summary for customer
+    getOrderSummary: async (customerId) => {
+        const response = await fetch(`${API_BASE_URL}/orders/${customerId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        return handleResponse(response);
+    },
+
+    // Complete checkout with payment details
+    checkout: async (customerId, paymentRequestDto) => {
+        const response = await fetch(`${API_BASE_URL}/orders/checkout/${customerId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(paymentRequestDto)
+        });
+        return handleResponse(response);
+    }
 };

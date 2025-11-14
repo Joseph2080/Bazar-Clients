@@ -2,7 +2,6 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import ProductCarousel from "./ProductCarousel";
-import { cartAPI } from "../../services/api";
 
 export default function ProductModal({ product, onClose, onAddToCart }) {
     const [isAdded, setIsAdded] = useState(false);
@@ -18,11 +17,10 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
         setError(null);
 
         try {
-            // Call your API
-            await cartAPI.addToCart(productResponseDto.productId, 1);
+            // Call parent's addToCart which handles createCart vs addToCart logic
+            await onAddToCart(product, 1);
 
             // Update local state
-            onAddToCart(product);
             setIsAdded(true);
 
             // Reset and close after success
