@@ -17,12 +17,14 @@ export default defineConfig({
       formats: ['umd'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'framer-motion'],
+      external: ['react', 'react-dom', 'framer-motion', 'react-redux', '@reduxjs/toolkit'],
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
           'framer-motion': 'FramerMotion',
+          'react-redux': 'ReactRedux',
+          '@reduxjs/toolkit': 'RTK',
         },
       },
     },

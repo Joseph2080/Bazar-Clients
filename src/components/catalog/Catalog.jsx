@@ -1,5 +1,6 @@
 // src/pages/Catalog.jsx
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { AnimatePresence, motion } from "framer-motion";
 import ProductModal from "../catalog/ProductModel";
 import ProductList from "./ProductList";
@@ -7,103 +8,82 @@ import OrderSummaryModal from "../order/OrderSummaryModal";
 import OrderCheckout from "../order/OrderCheckout"
 import LoadingScreen from "../common/LoadingScreen";
 import logo from "../../assets/bazar-logo.gif";
-import { productsAPI, cartAPI } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+import { fetchProducts, setSearchQuery, clearSearchQuery } from "../../store/slices/productsSlice";
+import { fetchCartSummary, addToCart as addToCartAction } from "../../store/slices/cartSlice";
+import { 
+    setSelectedProduct, 
+    closeProductModal, 
+    openOrderSummary, 
+    closeOrderSummary,
+    openOrderCheckout,
+    closeOrderCheckout 
+} from "../../store/slices/uiSlice";
 
 export default function Catalog() {
-    const [selected, setSelected] = useState(null);
-    const [showOrderSummary, setShowOrderSummary] = useState(false);
-    const [showOrderCheckout, setShowOrderCheckout] = useState(false);
-    const [products, setProducts] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [searchQuery, setSearchQuery] = useState("");
+    const dispatch = useDispatch();
+    const { isAuthenticated, login } = useAuth();
+    
+    // Redux state
+    const { filteredItems: products, isLoading, error, searchQuery } = useSelector(state => state.products);
+    const { cartCount, cartTotal } = useSelector(state => state.cart);
+    const { selectedProduct, showOrderSummary, showOrderCheckout, showProductModal } = useSelector(state => state.ui);
 
-    // Light cart state
-    const [cartCount, setCartCount] = useState(0);
-    const [cartTotal, setCartTotal] = useState(0);
-
-    // Fetch products from backend
+    // Fetch products and cart info on mount
     useEffect(() => {
-        const fetchProducts = async () => {
-            setIsLoading(true);
-            setError(null);
-
-            try {
-                const response = await productsAPI.getAllProducts();
-                const productsData = response.data || response;
-                setProducts(productsData);
-            } catch (err) {
-                console.error('Error fetching products:', err);
-                setError(err.message || 'Failed to load products');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchProducts();
-    }, []);
-
-    // Fetch light cart info on mount
-    useEffect(() => {
-        fetchLightCartInfo();
-    }, []);
-
-    const fetchLightCartInfo = async () => {
-        try {
-            const response = await cartAPI.getCartSummary();
-            const summary = response.data;
-            setCartCount(summary?.totalItems || 0);
-            setCartTotal(summary?.totalPrice || 0);
-        } catch (err) {
-            console.error('Error fetching cart info:', err);
-            setCartCount(0);
-            setCartTotal(0);
+        dispatch(fetchProducts());
+        
+        // Only fetch cart summary if authenticated
+        if (isAuthenticated) {
+            dispatch(fetchCartSummary());
         }
+    }, [dispatch, isAuthenticated]);
+
+    const handleProductSelect = (product) => {
+        dispatch(setSelectedProduct(product));
     };
 
-    const addToCart = async (product, quantity = 1) => {
+    const handleAddToCart = async (product, quantity = 1) => {
+        // This function should ONLY be called after authentication check passes
+        // No authentication check here - it's handled in ProductModal
+        
         try {
-            let response;
-
-            if (cartCount === 0) {
-                response = await cartAPI.createCart(product.productResponseDto.productId, quantity);
-            } else {
-                response = await cartAPI.addToCart(product.productResponseDto.productId, quantity);
-            }
-
-            if (response.data) {
-                setCartCount(response.data.cartSize || 0);
-            }
-
-            await fetchLightCartInfo();
+            const isFirstItem = cartCount === 0;
+            await dispatch(addToCartAction({ 
+                productId: product.productResponseDto.productId, 
+                quantity,
+                isFirstItem 
+            })).unwrap();
+            
+            // Refresh cart summary
+            dispatch(fetchCartSummary());
         } catch (err) {
             console.error('Error adding to cart:', err);
-            alert('Failed to add item to cart');
+            throw err; // Re-throw so ProductModal can handle it
         }
     };
 
     const handleOrderSummaryClose = () => {
-        setShowOrderSummary(false);
-        fetchLightCartInfo();
+        dispatch(closeOrderSummary());
+        dispatch(fetchCartSummary());
     };
 
     const handleProceedToCheckout = () => {
-        setShowOrderSummary(false);
-        setShowOrderCheckout(true);
+        dispatch(openOrderCheckout());
     };
 
     const handleOrderCheckoutClose = () => {
-        setShowOrderCheckout(false);
-        fetchLightCartInfo();
+        dispatch(closeOrderCheckout());
+        dispatch(fetchCartSummary());
     };
 
-    // Filter products based on search query
-    const filteredProducts = products.filter(product => {
-        const searchLower = searchQuery.toLowerCase();
-        const name = product.productResponseDto?.name?.toLowerCase() || '';
-        const description = product.productResponseDto?.description?.toLowerCase() || '';
-        return name.includes(searchLower) || description.includes(searchLower);
-    });
+    const handleSearchChange = (value) => {
+        dispatch(setSearchQuery(value));
+    };
+
+    const handleSearchClear = () => {
+        dispatch(clearSearchQuery());
+    };
 
     // Loading state
     if (isLoading) {
@@ -119,7 +99,7 @@ export default function Catalog() {
                     <h2 className="text-xl font-semibold mb-2">Failed to load products</h2>
                     <p className="text-gray-600 mb-4">{error}</p>
                     <button
-                        onClick={() => window.location.reload()}
+                        onClick={() => dispatch(fetchProducts())}
                         className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800"
                     >
                         Retry
@@ -130,7 +110,7 @@ export default function Catalog() {
     }
 
     // Empty state
-    if (products.length === 0) {
+    if (products.length === 0 && !searchQuery) {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="text-center">
@@ -144,10 +124,10 @@ export default function Catalog() {
 
     return (
         <div className="min-h-screen bg-white">
-            <div className="max-w-7xl mx-auto">
-                {/* Search Bar */}
-                <div className="bg-white border-b border-gray-200 px-4 py-4">
-                    <div className="relative max-w-7xl mx-auto flex items-center gap-4">
+            {/* Search Bar */}
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
+                <div className="max-w-7xl mx-auto px-4 py-4">
+                    <div className="flex items-center gap-4">
                         {/* Logo */}
                         <div className="flex-shrink-0 h-10 w-auto overflow-hidden">
                             <img
@@ -162,13 +142,13 @@ export default function Catalog() {
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Search"
+                                    placeholder="Search products..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full px-4 py-3 pl-12 pr-10 text-base bg-gray-100 rounded-full border-0 focus:outline-none focus:bg-white focus:ring-2 focus:ring-gray-300 transition-all"
+                                    onChange={(e) => handleSearchChange(e.target.value)}
+                                    className="w-full px-4 py-3 pl-12 pr-10 text-base bg-gray-50 rounded-full border-0 focus:outline-none focus:bg-white focus:ring-2 focus:ring-gray-300 transition-all"
                                 />
                                 <svg
-                                    className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500"
+                                    className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -182,8 +162,8 @@ export default function Catalog() {
                                 </svg>
                                 {searchQuery && (
                                     <button
-                                        onClick={() => setSearchQuery("")}
-                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
+                                        onClick={handleSearchClear}
+                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -191,22 +171,24 @@ export default function Catalog() {
                                     </button>
                                 )}
                             </div>
-                            {searchQuery && (
-                                <motion.p
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="text-center text-sm text-gray-600 mt-2"
-                                >
-                                    {filteredProducts.length} {filteredProducts.length === 1 ? 'result' : 'results'}
-                                </motion.p>
-                            )}
                         </div>
                     </div>
+                    
+                    {searchQuery && (
+                        <motion.p
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-sm text-gray-600 mt-3 ml-14"
+                        >
+                            {products.length} {products.length === 1 ? 'result' : 'results'}
+                        </motion.p>
+                    )}
                 </div>
+            </div>
 
-                <div className="p-4">
-                    <ProductList products={filteredProducts} onSelect={setSelected} />
-                </div>
+            {/* Product Grid */}
+            <div className="max-w-7xl mx-auto px-4 py-6">
+                <ProductList products={products} onSelect={handleProductSelect} />
             </div>
 
             {cartCount > 0 && (
@@ -214,7 +196,7 @@ export default function Catalog() {
                     initial={{ y: 100, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     className="fixed bottom-6 right-6 bg-black text-white px-6 py-4 rounded-full shadow-lg hover:bg-gray-800 font-semibold flex items-center gap-2"
-                    onClick={() => setShowOrderSummary(true)}
+                    onClick={() => dispatch(openOrderSummary())}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                 >
@@ -226,11 +208,13 @@ export default function Catalog() {
             )}
 
             <AnimatePresence>
-                {selected && (
+                {showProductModal && selectedProduct && (
                     <ProductModal
-                        product={selected}
-                        onClose={() => setSelected(null)}
-                        onAddToCart={addToCart}
+                        product={selectedProduct}
+                        onClose={() => dispatch(closeProductModal())}
+                        onAddToCart={handleAddToCart}
+                        isAuthenticated={isAuthenticated}
+                        onLogin={login}
                     />
                 )}
 
@@ -238,14 +222,12 @@ export default function Catalog() {
                     <OrderSummaryModal
                         onClose={handleOrderSummaryClose}
                         onProceedToCheckout={handleProceedToCheckout}
-                        onCartCountUpdate={setCartCount}
                     />
                 )}
 
                 {showOrderCheckout && (
                     <OrderCheckout
                         onClose={handleOrderCheckoutClose}
-                        onCartCountUpdate={setCartCount}
                     />
                 )}
             </AnimatePresence>

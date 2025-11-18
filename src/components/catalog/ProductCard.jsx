@@ -37,13 +37,14 @@ export default function ProductCard({ product, onSelect }) {
     return (
         <motion.div
             layout
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ y: -4 }}
+            transition={{ duration: 0.2 }}
             className="cursor-pointer group"
             onClick={() => onSelect(product)}
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
         >
-            <div className="relative bg-gray-100 aspect-[3/4] overflow-hidden">
+            <div className="relative bg-gray-50 aspect-[3/4] overflow-hidden rounded-sm">
                 {currentImage && (
                     <img
                         src={currentImage}
@@ -52,50 +53,58 @@ export default function ProductCard({ product, onSelect }) {
                     />
                 )}
 
+                {/* Favorite button - appears on hover */}
+                <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: isHovering ? 1 : 0 }}
+                    className="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md hover:scale-110 transition-transform"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        // Add to favorites functionality
+                    }}
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                </motion.button>
+
                 {/* Image Counter - shows on hover if multiple images */}
                 {hasMultipleImages && isHovering && (
-                    <div className="absolute top-3 right-3 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
-                        {currentImageIndex + 1} / {catalogResourceUrlSet.length}
+                    <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
+                        {currentImageIndex + 1}/{catalogResourceUrlSet.length}
                     </div>
                 )}
 
                 {/* Stock Badge */}
-                {productResponseDto.stock < 10 && (
-                    <div className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 text-xs font-medium">
+                {productResponseDto.stock < 10 && productResponseDto.stock > 0 && (
+                    <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 text-xs font-medium rounded">
                         Only {productResponseDto.stock} left
                     </div>
                 )}
 
                 {productResponseDto.stock === 0 && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                        <span className="bg-white px-4 py-2 text-sm font-semibold">
+                    <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                        <span className="bg-white px-3 py-1.5 text-xs font-semibold rounded">
                             OUT OF STOCK
                         </span>
                     </div>
                 )}
             </div>
 
-            <div className="pt-3 pb-2">
-                <h3 className="text-sm font-normal mb-1 line-clamp-2">
+            <div className="pt-2.5 pb-2">
+                <h3 className="text-sm font-normal mb-1 line-clamp-2 text-gray-900 group-hover:text-black">
                     {productResponseDto.name}
                 </h3>
-                <p className="text-sm font-semibold">
+                <p className="text-sm font-semibold text-gray-900">
                     €{productResponseDto.price.toFixed(2)}
                 </p>
 
-                {/* Additional Info */}
-                <div className="flex items-center gap-2 mt-1">
-                    {productResponseDto.stock > 0 && productResponseDto.stock < 50 && (
-                        <span className="text-xs text-orange-600">
-                            Low stock
-                        </span>
-                    )}
-                    {hasMultipleImages && (
-                        <span className="text-xs text-gray-500">
-                            +{catalogResourceUrlSet.length - 1} more
-                        </span>
-                    )}
-                </div>
+                {/* Additional Info - only show low stock warning */}
+                {productResponseDto.stock > 0 && productResponseDto.stock < 50 && (
+                    <span className="text-xs text-orange-600 mt-1 block">
+                        Low stock
+                    </span>
+                )}
             </div>
         </motion.div>
     );

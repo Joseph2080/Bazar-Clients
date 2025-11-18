@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import ProductCarousel from "./ProductCarousel";
 
-export default function ProductModal({ product, onClose, onAddToCart }) {
+export default function ProductModal({ product, onClose, onAddToCart, isAuthenticated, onLogin }) {
     const [isAdded, setIsAdded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -13,6 +13,12 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
     const { productResponseDto, catalogResourceUrlSet } = product;
 
     const handleAddToCart = async () => {
+        // CRITICAL: Do not make ANY API calls if not authenticated
+        if (!isAuthenticated) {
+            console.log('Add to cart blocked - user not authenticated');
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
 
@@ -34,6 +40,11 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleLoginClick = () => {
+        // Only call login when user clicks the sign-in button
+        onLogin('/catalog');
     };
 
     return (
@@ -71,6 +82,33 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
                         €{productResponseDto.price.toFixed(2)}
                     </p>
 
+                    {/* Login prompt notification - appears when not authenticated */}
+                    {!isAuthenticated && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mb-4 p-4 bg-gray-50 border border-gray-300 rounded-lg"
+                        >
+                            <div className="flex items-start gap-3">
+                                <svg className="w-6 h-6 text-gray-700 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div className="flex-1">
+                                    <h4 className="font-semibold text-gray-900 mb-1">Sign in required</h4>
+                                    <p className="text-sm text-gray-700 mb-3">
+                                        You need to sign in to add items to your cart and make purchases.
+                                    </p>
+                                    <button
+                                        onClick={handleLoginClick}
+                                        className="w-full bg-black hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+                                    >
+                                        Sign In to Continue
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
                     {error && (
                         <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
                             {error}
@@ -78,15 +116,15 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
                     )}
 
                     <motion.button
-                        whileHover={{ scale: isAdded ? 1 : 1.05 }}
-                        whileTap={{ scale: isAdded ? 1 : 0.95 }}
+                        whileHover={{ scale: (isAdded || !isAuthenticated) ? 1 : 1.05 }}
+                        whileTap={{ scale: (isAdded || !isAuthenticated) ? 1 : 0.95 }}
                         className={`w-full py-3 rounded-md font-semibold transition-colors ${
                             isAdded
                                 ? 'bg-white text-black'
                                 : 'bg-black text-white hover:bg-gray-800'
-                        } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } ${isLoading || !isAuthenticated ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                         onClick={handleAddToCart}
-                        disabled={isAdded || isLoading}
+                        disabled={isAdded || isLoading || !isAuthenticated}
                     >
                         {isLoading ? (
                             <span>Adding...</span>

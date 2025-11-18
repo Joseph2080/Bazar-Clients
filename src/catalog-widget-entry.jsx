@@ -1,7 +1,10 @@
 // Entry point for the Catalog UMD bundle
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { Provider } from 'react-redux';
+import { AuthProvider } from './context/AuthContext';
 import Catalog from './components/catalog/Catalog';
+import store from './store';
 import './index.css'; // Import your global styles
 
 // Expose the initialization function globally
@@ -20,9 +23,15 @@ window.initProductsWidget = function(containerId) {
       loadingFallback.remove();
     }
 
-    // Create React root and render the Catalog
+    // Create React root and render the Catalog with Redux Provider and AuthProvider
     const root = ReactDOM.createRoot(container);
-    root.render(React.createElement(Catalog));
+    root.render(
+      React.createElement(AuthProvider, null,
+        React.createElement(Provider, { store }, 
+          React.createElement(Catalog)
+        )
+      )
+    );
     
     console.log('Products widget initialized successfully');
   } catch (error) {

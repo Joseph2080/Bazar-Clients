@@ -1,69 +1,56 @@
 // src/components/order/OrderSummaryModal.jsx
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { cartAPI, orderAPI } from "../../services/api";
+import { useDispatch, useSelector } from "react-redux";
+import { orderAPI } from "../../services/api";
 import logo from "../../assets/bazar-logo.gif";
+import { 
+    fetchCartSummary, 
+    removeFromCart as removeFromCartAction,
+    applyDiscountCode,
+    clearDiscountError 
+} from "../../store/slices/cartSlice";
 
-export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProceedToCheckout }) {
+export default function OrderSummaryModal({ onClose, onProceedToCheckout }) {
+    const dispatch = useDispatch();
     const [discountCode, setDiscountCode] = useState("");
-    const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
-    const [error, setError] = useState(null);
     const [isRemoving, setIsRemoving] = useState({});
+    const [checkoutError, setCheckoutError] = useState(null);
+    const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
-    // Cart summary state
-    const [cartSummary, setCartSummary] = useState(null);
-    const [isLoadingCart, setIsLoadingCart] = useState(true);
-
-    const fetchCartSummary = async () => {
-        setIsLoadingCart(true);
-        setError(null);
-        try {
-            const response = await cartAPI.getCartSummary();
-            const summary = response.data || response;
-            setCartSummary(summary);
-        } catch (err) {
-            console.error('Error fetching cart summary:', err);
-            setError(err.message || 'Failed to load cart');
-        } finally {
-            setIsLoadingCart(false);
-        }
-    };
+    // Redux state
+    const { 
+        cartItems, 
+        cartTotal, 
+        isLoading, 
+        error, 
+        discountError,
+        isApplyingDiscount 
+    } = useSelector(state => state.cart);
 
     useEffect(() => {
-        fetchCartSummary();
-    }, []);
+        dispatch(fetchCartSummary());
+    }, [dispatch]);
 
-    const cartItems = cartSummary?.cartItems || [];
-    const subtotal = cartSummary?.totalPrice || 0;
+    const subtotal = cartTotal || 0;
     const total = subtotal;
 
-    const applyDiscount = async () => {
+    const handleApplyDiscount = async () => {
         if (!discountCode.trim()) return;
 
-        setIsApplyingDiscount(true);
-        setError(null);
-
         try {
-            await cartAPI.applyDiscount(discountCode);
+            await dispatch(applyDiscountCode(discountCode)).unwrap();
             setDiscountCode("");
-            await fetchCartSummary();
         } catch (err) {
-            setError(err.message || 'Failed to apply discount code');
             console.error('Error applying discount:', err);
-        } finally {
-            setIsApplyingDiscount(false);
         }
     };
 
     const handleRemoveItem = async (item) => {
         setIsRemoving(prev => ({ ...prev, [item.productName]: true }));
         try {
-            await cartAPI.removeFromCart(item.productId);
-            await fetchCartSummary();
-            if (onCartCountUpdate && cartSummary) {
-                const newCount = Math.max(0, (cartSummary.totalItems || 0) - item.quantity);
-                onCartCountUpdate(newCount);
-            }
+            await dispatch(removeFromCartAction(item.productId)).unwrap();
+            await dispatch(fetchCartSummary());
         } catch (err) {
             console.error('Error removing item:', err);
             alert('Failed to remove item from cart');
@@ -75,10 +62,10 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
     const handleProceedToCheckoutClick = async () => {
         try {
             // TODO: Replace with actual customerId from your auth/session
-            const customerId = "random123"; // You'll need to get this from your auth context
+            const customerId = "random123";
             
-            setError(null);
-            setIsApplyingDiscount(true); // Reuse loading state for UI feedback
+            setCheckoutError(null);
+            setIsProcessingCheckout(true);
             
             // Call the checkout link API
             const response = await orderAPI.generateCheckoutLink(customerId);
@@ -94,11 +81,13 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
             }
         } catch (err) {
             console.error('Error generating checkout link:', err);
-            setError(err.message || 'Failed to proceed to checkout. Please try again.');
+            setCheckoutError(err.message || 'Failed to proceed to checkout. Please try again.');
         } finally {
-            setIsApplyingDiscount(false);
+            setIsProcessingCheckout(false);
         }
     };
+
+    const displayError = error || discountError || checkoutError;
 
     return (
         <>
@@ -135,17 +124,21 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
                         <h2 className="text-2xl font-bold mb-6">Order Summary</h2>
 
                         {/* Loading State */}
-                        {isLoadingCart ? (
+                        {isLoading ? (
                             <div className="text-center py-12">
                                 <img src={logo} alt="Loading" className="mx-auto w-16 h-16 mb-4" />
                                 <p className="text-gray-600">Loading cart...</p>
                             </div>
-                        ) : error ? (
+                        ) : displayError ? (
                             <div className="text-center py-12">
                                 <img src={logo} alt="Error" className="mx-auto w-16 h-16 mb-4 opacity-50" />
-                                <p className="text-gray-600 mb-4">{error}</p>
+                                <p className="text-gray-600 mb-4">{displayError}</p>
                                 <button
-                                    onClick={fetchCartSummary}
+                                    onClick={() => {
+                                        dispatch(fetchCartSummary());
+                                        dispatch(clearDiscountError());
+                                        setCheckoutError(null);
+                                    }}
                                     className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800"
                                 >
                                     Retry
@@ -210,9 +203,9 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
                                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                                     <h3 className="font-semibold mb-3">Discount Code</h3>
 
-                                    {error && (
+                                    {discountError && (
                                         <div className="mb-3 p-2 bg-red-100 border border-red-400 text-red-700 text-sm rounded">
-                                            {error}
+                                            {discountError}
                                         </div>
                                     )}
 
@@ -223,10 +216,10 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
                                             onChange={(e) => setDiscountCode(e.target.value)}
                                             placeholder="Enter discount code"
                                             className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            onKeyPress={(e) => e.key === 'Enter' && applyDiscount()}
+                                            onKeyPress={(e) => e.key === 'Enter' && handleApplyDiscount()}
                                         />
                                         <button
-                                            onClick={applyDiscount}
+                                            onClick={handleApplyDiscount}
                                             disabled={isApplyingDiscount || !discountCode.trim()}
                                             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                         >
@@ -238,7 +231,7 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
                                 {/* Price Breakdown */}
                                 <div className="space-y-2 mb-6 border-t pt-4">
                                     <div className="flex justify-between text-gray-600">
-                                        <span>Subtotal ({cartSummary?.totalItems || 0} items)</span>
+                                        <span>Subtotal ({cartItems.length} items)</span>
                                         <span>€{subtotal.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between text-xl font-bold border-t pt-2">
@@ -257,10 +250,10 @@ export default function OrderSummaryModal({ onClose, onCartCountUpdate, onProcee
                                     </button>
                                     <button
                                         onClick={handleProceedToCheckoutClick}
-                                        disabled={cartItems.length === 0 || isApplyingDiscount}
+                                        disabled={cartItems.length === 0 || isProcessingCheckout}
                                         className="flex-1 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                     >
-                                        {isApplyingDiscount ? 'Processing...' : 'Proceed to Checkout'}
+                                        {isProcessingCheckout ? 'Processing...' : 'Proceed to Checkout'}
                                     </button>
                                 </div>
                             </>
