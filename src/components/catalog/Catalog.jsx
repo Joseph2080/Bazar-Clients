@@ -1,5 +1,5 @@
 // src/pages/Catalog.jsx
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AnimatePresence, motion } from "framer-motion";
 import ProductModal from "../catalog/ProductModel";
@@ -22,22 +22,18 @@ import {
 
 export default function Catalog() {
     const dispatch = useDispatch();
-    const { isAuthenticated, login } = useAuth();
+    const { isAuthenticated, login, user, logout } = useAuth();
+    const [showProfileMenu, setShowProfileMenu] = useState(false);
     
     // Redux state
     const { filteredItems: products, isLoading, error, searchQuery } = useSelector(state => state.products);
     const { cartCount, cartTotal } = useSelector(state => state.cart);
     const { selectedProduct, showOrderSummary, showOrderCheckout, showProductModal } = useSelector(state => state.ui);
 
-    // Fetch products and cart info on mount
+    // Fetch products on mount
     useEffect(() => {
         dispatch(fetchProducts());
-        
-        // Only fetch cart summary if authenticated
-        if (isAuthenticated) {
-            dispatch(fetchCartSummary());
-        }
-    }, [dispatch, isAuthenticated]);
+    }, [dispatch]);
 
     const handleProductSelect = (product) => {
         dispatch(setSelectedProduct(product));
@@ -55,8 +51,8 @@ export default function Catalog() {
                 isFirstItem 
             })).unwrap();
             
-            // Refresh cart summary
-            dispatch(fetchCartSummary());
+            // Don't fetch cart summary here - wait until user opens order summary
+            // Just update the cart count from the response
         } catch (err) {
             console.error('Error adding to cart:', err);
             throw err; // Re-throw so ProductModal can handle it
@@ -65,7 +61,14 @@ export default function Catalog() {
 
     const handleOrderSummaryClose = () => {
         dispatch(closeOrderSummary());
-        dispatch(fetchCartSummary());
+    };
+
+    const handleOrderSummaryOpen = () => {
+        // Fetch cart summary when opening order summary modal
+        if (isAuthenticated) {
+            dispatch(fetchCartSummary());
+        }
+        dispatch(openOrderSummary());
     };
 
     const handleProceedToCheckout = () => {
@@ -129,11 +132,11 @@ export default function Catalog() {
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex items-center gap-4">
                         {/* Logo */}
-                        <div className="flex-shrink-0 h-10 w-auto overflow-hidden">
+                        <div className="flex-shrink-0">
                             <img
                                 src={logo}
                                 alt="Logo"
-                                className="h-10 w-auto scale-125"
+                                className="h-12 w-auto"
                             />
                         </div>
 
@@ -172,6 +175,67 @@ export default function Catalog() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Profile Icon - Only show when authenticated */}
+                        {isAuthenticated && (
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowProfileMenu(!showProfileMenu)}
+                                    className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                                >
+                                    <svg className="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                </button>
+
+                                {/* Profile Dropdown */}
+                                <AnimatePresence>
+                                    {showProfileMenu && (
+                                        <>
+                                            {/* Backdrop to close menu */}
+                                            <div 
+                                                className="fixed inset-0 z-30"
+                                                onClick={() => setShowProfileMenu(false)}
+                                            />
+                                            
+                                            <motion.div
+                                                initial={{ opacity: 0, y: -10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -10 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-40"
+                                            >
+                                                {/* User Info */}
+                                                <div className="px-4 py-3 border-b border-gray-200">
+                                                    <p className="text-sm font-semibold text-gray-900">
+                                                        {user?.username || user?.email || 'User'}
+                                                    </p>
+                                                    {user?.email && (
+                                                        <p className="text-xs text-gray-500 mt-1">
+                                                            {user.email}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Logout Button */}
+                                                <button
+                                                    onClick={() => {
+                                                        logout();
+                                                        setShowProfileMenu(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                    </svg>
+                                                    Logout
+                                                </button>
+                                            </motion.div>
+                                        </>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        )}
                     </div>
                     
                     {searchQuery && (
@@ -196,7 +260,7 @@ export default function Catalog() {
                     initial={{ y: 100, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     className="fixed bottom-6 right-6 bg-black text-white px-6 py-4 rounded-full shadow-lg hover:bg-gray-800 font-semibold flex items-center gap-2"
-                    onClick={() => dispatch(openOrderSummary())}
+                    onClick={handleOrderSummaryOpen}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                 >

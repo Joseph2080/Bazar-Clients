@@ -7,6 +7,7 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
     const [isAdded, setIsAdded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [quantity, setQuantity] = useState(1);
 
     if (!product) return null;
 
@@ -24,7 +25,7 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
 
         try {
             // Call parent's addToCart which handles createCart vs addToCart logic
-            await onAddToCart(product, 1);
+            await onAddToCart(product, quantity);
 
             // Update local state
             setIsAdded(true);
@@ -32,6 +33,7 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
             // Reset and close after success
             setTimeout(() => {
                 setIsAdded(false);
+                setQuantity(1); // Reset quantity
                 onClose();
             }, 1500);
         } catch (err) {
@@ -39,6 +41,22 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
             console.error('Error adding to cart:', err);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleQuantityChange = (change) => {
+        const newQuantity = quantity + change;
+        if (newQuantity >= 1 && newQuantity <= productResponseDto.stock) {
+            setQuantity(newQuantity);
+        }
+    };
+
+    const handleQuantityInput = (e) => {
+        const value = parseInt(e.target.value);
+        if (!isNaN(value) && value >= 1 && value <= productResponseDto.stock) {
+            setQuantity(value);
+        } else if (e.target.value === '') {
+            setQuantity(1);
         }
     };
 
@@ -59,12 +77,14 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
 
             <motion.div
                 className="fixed inset-0 z-50 flex items-center justify-center"
+                onClick={onClose}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
             >
                 <motion.div
                     className="relative w-[90%] max-w-md bg-white rounded-lg p-6 shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
                     initial={{ opacity: 0, scale: 0.85 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -78,9 +98,60 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
                     <p className="text-gray-600 mb-4">
                         {productResponseDto.description}
                     </p>
-                    <p className="text-lg font-bold mb-4">
+                    <p className="text-lg font-bold mb-2">
                         €{productResponseDto.price.toFixed(2)}
                     </p>
+
+                    {/* Stock Information */}
+                    <div className="mb-4">
+                        {productResponseDto.stock > 0 ? (
+                            <p className="text-sm text-gray-600">
+                                {productResponseDto.stock < 10 
+                                    ? `Only ${productResponseDto.stock} left in stock` 
+                                    : productResponseDto.stock < 50 
+                                        ? 'Low stock' 
+                                        : 'In stock'}
+                            </p>
+                        ) : (
+                            <p className="text-sm text-red-600 font-semibold">Out of stock</p>
+                        )}
+                    </div>
+
+                    {/* Quantity Selector - Only show when authenticated and in stock */}
+                    {isAuthenticated && productResponseDto.stock > 0 && (
+                        <div className="mb-4">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Quantity
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => handleQuantityChange(-1)}
+                                    disabled={quantity <= 1}
+                                    className="w-10 h-10 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                                >
+                                    -
+                                </button>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max={productResponseDto.stock}
+                                    value={quantity}
+                                    onChange={handleQuantityInput}
+                                    className="w-20 h-10 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black"
+                                />
+                                <button
+                                    onClick={() => handleQuantityChange(1)}
+                                    disabled={quantity >= productResponseDto.stock}
+                                    className="w-10 h-10 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                                >
+                                    +
+                                </button>
+                                <span className="text-sm text-gray-600">
+                                    of {productResponseDto.stock} available
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Login prompt notification - appears when not authenticated */}
                     {!isAuthenticated && (
@@ -116,15 +187,15 @@ export default function ProductModal({ product, onClose, onAddToCart, isAuthenti
                     )}
 
                     <motion.button
-                        whileHover={{ scale: (isAdded || !isAuthenticated) ? 1 : 1.05 }}
-                        whileTap={{ scale: (isAdded || !isAuthenticated) ? 1 : 0.95 }}
+                        whileHover={{ scale: (isAdded || !isAuthenticated || productResponseDto.stock === 0) ? 1 : 1.05 }}
+                        whileTap={{ scale: (isAdded || !isAuthenticated || productResponseDto.stock === 0) ? 1 : 0.95 }}
                         className={`w-full py-3 rounded-md font-semibold transition-colors ${
                             isAdded
                                 ? 'bg-white text-black'
                                 : 'bg-black text-white hover:bg-gray-800'
-                        } ${isLoading || !isAuthenticated ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                        } ${isLoading || !isAuthenticated || productResponseDto.stock === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                         onClick={handleAddToCart}
-                        disabled={isAdded || isLoading || !isAuthenticated}
+                        disabled={isAdded || isLoading || !isAuthenticated || productResponseDto.stock === 0}
                     >
                         {isLoading ? (
                             <span>Adding...</span>

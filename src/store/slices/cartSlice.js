@@ -123,6 +123,7 @@ const cartSlice = createSlice({
                 state.error = null;
             })
             .addCase(addToCart.fulfilled, (state, action) => {
+                // Update cart count from server response (cartSize = total quantity)
                 state.cartCount = action.payload?.cartSize || state.cartCount + 1;
             })
             .addCase(addToCart.rejected, (state, action) => {

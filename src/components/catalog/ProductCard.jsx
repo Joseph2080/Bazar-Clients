@@ -1,5 +1,5 @@
 // src/components/catalog/ProductCard.jsx
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 
 export default function ProductCard({ product, onSelect }) {
@@ -44,14 +44,29 @@ export default function ProductCard({ product, onSelect }) {
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
         >
-            <div className="relative bg-gray-50 aspect-[3/4] overflow-hidden rounded-sm">
-                {currentImage && (
-                    <img
-                        src={currentImage}
-                        alt={productResponseDto.name}
-                        className="w-full h-full object-cover transition-opacity duration-300"
-                    />
-                )}
+            <div className="relative bg-gray-50 aspect-[3/4] overflow-hidden rounded-sm" style={{ perspective: "1000px" }}>
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={currentImageIndex}
+                        initial={{ rotateY: 90, opacity: 0 }}
+                        animate={{ rotateY: 0, opacity: 1 }}
+                        exit={{ rotateY: -90, opacity: 0 }}
+                        transition={{ duration: 0.8, ease: "easeInOut" }}
+                        style={{ 
+                            transformStyle: "preserve-3d",
+                            backfaceVisibility: "hidden"
+                        }}
+                        className="w-full h-full"
+                    >
+                        {currentImage && (
+                            <img
+                                src={currentImage}
+                                alt={productResponseDto.name}
+                                className="w-full h-full object-cover"
+                            />
+                        )}
+                    </motion.div>
+                </AnimatePresence>
 
                 {/* Favorite button - appears on hover */}
                 <motion.button

@@ -1,5 +1,5 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { authAPI } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -17,6 +17,7 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const isProcessingCallback = useRef(false); // Prevent duplicate callback processing
 
     // Check if user is authenticated on mount
     useEffect(() => {
@@ -128,23 +129,26 @@ export const AuthProvider = ({ children }) => {
     };
 
     const handleCallback = async (code, state) => {
+        // Prevent duplicate callback processing
+        if (isProcessingCallback.current) {
+            console.log('Callback already being processed, ignoring duplicate call');
+            return sessionStorage.getItem('auth_redirect') || '/catalog';
+        }
+        
+        isProcessingCallback.current = true;
+        
         try {
             console.log('Received state from callback:', state);
             
-            // Verify state to prevent CSRF
+            // Optional state verification (CSRF disabled on backend)
             const storedState = sessionStorage.getItem('auth_state');
             console.log('Stored state:', storedState);
             
-            // If state is null, it might have been cleared or never set
-            if (!storedState) {
-                console.error('No stored state found in sessionStorage');
-                console.error('All sessionStorage keys:', Object.keys(sessionStorage));
-                // For debugging: allow the flow to continue but log the issue
-                console.warn('Proceeding without state verification (NOT SECURE - FIX IN PRODUCTION)');
-            } else if (state !== storedState) {
-                throw new Error(`Invalid state parameter. Received: ${state}, Expected: ${storedState}`);
+            if (storedState && state && state !== storedState) {
+                console.warn(`State mismatch - Received: ${state}, Expected: ${storedState}`);
+                // Don't throw error since CSRF is disabled on backend
             }
-
+            
             // Exchange code for tokens
             // Use the EXACT same redirect_uri that was used in the authorization request
             const storedRedirectUri = sessionStorage.getItem('auth_redirect_uri');
@@ -160,7 +164,7 @@ export const AuthProvider = ({ children }) => {
             
             // Backend returns: { data: { access_token, id_token, token_type, expires_in }, message: "..." }
             const { access_token, id_token } = response.data;
-            
+            console.log('Received tokens from backend. Access token length:', access_token.length);            
             if (!access_token) {
                 throw new Error('Access token not received from backend');
             }
@@ -184,6 +188,7 @@ export const AuthProvider = ({ children }) => {
             return redirectPath;
         } catch (error) {
             console.error('Error handling callback:', error);
+            isProcessingCallback.current = false; // Reset on error to allow retry
             clearAuth();
             throw error;
         }

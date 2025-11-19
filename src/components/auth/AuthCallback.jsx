@@ -1,5 +1,5 @@
 // src/components/auth/AuthCallback.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import logo from '../../assets/bazar-logo.gif';
@@ -10,9 +10,17 @@ export default function AuthCallback() {
     const navigate = useNavigate();
     const { handleCallback } = useAuth();
     const [error, setError] = useState(null);
+    const hasProcessed = useRef(false); // Prevent duplicate processing
 
     useEffect(() => {
         const processCallback = async () => {
+            // Prevent duplicate processing (React StrictMode calls useEffect twice)
+            if (hasProcessed.current) {
+                console.log('Callback already processed, skipping...');
+                return;
+            }
+            hasProcessed.current = true;
+
             const code = searchParams.get('code');
             const state = searchParams.get('state');
             const errorParam = searchParams.get('error');
